@@ -1,6 +1,6 @@
 use clap::Parser;
 use opencode_rust::cli::{Command, Opts, cmd};
-use opencode_rust::util::config::Info;
+use opencode_rust::util::config::{self, Info};
 use opencode_rust::util::log::{self, LogConfig};
 use std::path::Path;
 use tracing::info;
@@ -13,12 +13,11 @@ async fn main() -> anyhow::Result<()> {
     log::init(LogConfig::new(level, opts.print_logs))?;
 
     let config_path = Path::new("opencode.json");
-    let config: Info = match config_path.exists() {
-        true => {
-            let config_str = tokio::fs::read_to_string(config_path).await?;
-            serde_json::from_str(&config_str)?
-        }
-        false => serde_json::from_str("{}")?,
+    let config: Info = if config_path.exists() {
+        let config_str = tokio::fs::read_to_string(config_path).await?;
+        config::parse_info(&config_str)?
+    } else {
+        Info::default()
     };
 
     info!(?config, "Loaded config");
