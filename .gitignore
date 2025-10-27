@@ -10,3 +10,5 @@ playground
 tmp
 dist
 .turbo
+/target
+opencode-rust/target
