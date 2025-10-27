@@ -10,6 +10,12 @@ pub enum OpenCodeError {
 
     #[error("Configuration error: {0}")]
     Config(String),
+
+    #[error("WalkDir error: {0}")]
+    WalkDir(#[from] walkdir::Error),
+
+    #[error("Reqwest error: {0}")]
+    Reqwest(#[from] reqwest::Error),
 }
 
 pub type Result<T> = std::result::Result<T, OpenCodeError>;

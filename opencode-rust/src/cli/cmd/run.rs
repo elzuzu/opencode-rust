@@ -7,8 +7,13 @@ use crate::session::{
     AgentEvent, LocalModel, ProjectContext, SessionPrompts, SessionRequest, SessionResult,
     SessionRuntime, SubagentOutcome,
 };
-use crate::tool::core::Tool;
-use crate::tool::echo::EchoTool;
+use crate::tool::{
+    bash::BashTool,
+    core::Tool,
+    echo::EchoTool,
+    fs::{ListFilesTool, ReadFileTool, WriteFileTool},
+    web::WebFetchTool,
+};
 use crate::util::config::Info;
 use clap::{Args, ValueEnum};
 use serde::Serialize;
@@ -89,7 +94,14 @@ pub async fn execute(cmd: &Run, config: &Info) -> anyhow::Result<()> {
         "run command"
     );
 
-    let tools: Vec<Arc<dyn Tool>> = vec![Arc::new(EchoTool)];
+    let tools: Vec<Arc<dyn Tool>> = vec![
+        Arc::new(EchoTool),
+        Arc::new(BashTool),
+        Arc::new(ReadFileTool),
+        Arc::new(WriteFileTool),
+        Arc::new(ListFilesTool),
+        Arc::new(WebFetchTool),
+    ];
 
     if let Some((tool_name, args)) = cmd.message.split_first() {
         if let Some(tool) = tools.iter().find(|tool| tool.name() == tool_name) {
