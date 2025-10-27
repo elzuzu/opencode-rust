@@ -1,52 +1,73 @@
 use clap::Parser;
-use opencode_rust::agent::core::Agent;
-use opencode_rust::agent::session::Session;
-use opencode_rust::cli::{Command, Opts};
-use opencode_rust::tool::echo::EchoTool;
+use opencode_rust::cli::{Command, Opts, cmd};
 use opencode_rust::util::config::Info;
-use opencode_rust::util::log;
+use opencode_rust::util::log::{self, LogConfig};
 use std::path::Path;
 use tracing::info;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    log::init("info");
-
     let opts = Opts::parse();
 
+    let level = opts.log_level.unwrap_or_default().as_filter();
+    log::init(LogConfig::new(level, opts.print_logs))?;
+
     let config_path = Path::new("opencode.json");
-    let config: Info = if config_path.exists() {
-        let config_str = tokio::fs::read_to_string(config_path).await?;
-        serde_json::from_str(&config_str)?
-    } else {
-        serde_json::from_str("{}")?
+    let config: Info = match config_path.exists() {
+        true => {
+            let config_str = tokio::fs::read_to_string(config_path).await?;
+            serde_json::from_str(&config_str)?
+        }
+        false => serde_json::from_str("{}")?,
     };
 
     info!(?config, "Loaded config");
 
     match opts.command {
         Command::Run(run_cmd) => {
-            let mut agent = Agent::new();
-            agent.add_tool(EchoTool);
-
-            let session = Session::new();
-            info!(session_id = %session.id(), "Starting new session");
-            info!(message = ?run_cmd.message, "Running with message");
-
-            if let Some((tool_name, args)) = run_cmd.message.split_first() {
-                match agent.run_tool(tool_name, args).await {
-                    Ok(output) => {
-                        info!(%output, "Tool executed successfully");
-                        println!("{}", output);
-                    }
-                    Err(e) => {
-                        eprintln!("Error: {}", e);
-                    }
-                }
-            }
+            cmd::run::execute(&run_cmd).await?;
         }
         Command::Generate => {
             info!("Generating OpenAPI spec");
+        }
+        Command::Auth(auth_cmd) => {
+            cmd::auth::execute(&auth_cmd).await?;
+        }
+        Command::Agent(agent_cmd) => {
+            cmd::agent::execute(&agent_cmd).await?;
+        }
+        Command::Upgrade(upgrade_cmd) => {
+            cmd::upgrade::execute(&upgrade_cmd).await?;
+        }
+        Command::Models => {
+            info!("Listing models");
+        }
+        Command::Serve(serve_cmd) => {
+            cmd::serve::execute(&serve_cmd).await?;
+        }
+        Command::Stats(stats_cmd) => {
+            cmd::stats::execute(&stats_cmd).await?;
+        }
+        Command::Export(export_cmd) => {
+            cmd::export::execute(&export_cmd).await?;
+        }
+        Command::Attach(attach_cmd) => {
+            cmd::attach::execute(&attach_cmd).await?;
+        }
+        Command::Acp(acp_cmd) => {
+            cmd::acp::execute(&acp_cmd).await?;
+        }
+        Command::Mcp(mcp_cmd) => {
+            cmd::mcp::execute(&mcp_cmd).await?;
+        }
+        Command::Tui(tui_cmd) => {
+            cmd::tui::execute(&tui_cmd).await?;
+        }
+        Command::Debug(debug_cmd) => {
+            cmd::debug::execute(&debug_cmd).await?;
+        }
+        Command::Github(github_cmd) => {
+            cmd::github::execute(&github_cmd).await?;
         }
     }
 
