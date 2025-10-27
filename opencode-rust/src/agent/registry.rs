@@ -87,7 +87,7 @@ impl AgentRegistry {
     pub fn agents_in_mode(&self, mode: AgentMode) -> Vec<Arc<AgentSpec>> {
         self.specs
             .values()
-            .filter(|spec| match (mode, &spec.mode) {
+            .filter(|spec| match (mode.clone(), &spec.mode) {
                 (AgentMode::All, _) => true,
                 (AgentMode::Primary, AgentMode::All) => true,
                 (AgentMode::Primary, AgentMode::Primary) => true,

@@ -204,8 +204,8 @@ impl AgentSpec {
         if let Some(description) = &definition.description {
             self.description = Some(description.clone());
         }
-        if let Some(mode) = definition.mode {
-            self.mode = mode;
+        if let Some(mode) = &definition.mode {
+            self.mode = mode.clone();
         }
         if let Some(report_format) = &definition.report_format {
             self.report_format = Some(report_format.clone());

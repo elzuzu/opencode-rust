@@ -17,6 +17,8 @@ thiserror = "1.0.63"
 async-trait = "0.1.81"
 uuid = { version = "1.10.0", features = ["v4"] }
 walkdir = "2.5.0"
+reqwest = { version = "0.12.24", features = ["json"] }
+scraper = "0.24.0"
 
 [dev-dependencies]
 tempfile = "3.13.0"
