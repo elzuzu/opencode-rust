@@ -244,7 +244,10 @@ fn map_event(event: Event, matcher: &IgnoreMatcher) -> Option<FileEvent> {
 
 fn select_path(event: &Event, matcher: &IgnoreMatcher) -> Option<PathBuf> {
     for path in event.paths.iter().rev() {
-        if !matcher.matches(path) {
+        if matcher.matches(path) {
+            continue;
+        }
+        if !path.exists() || !path.is_dir() {
             return Some(path.clone());
         }
     }
