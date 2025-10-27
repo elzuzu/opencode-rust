@@ -1,28 +1,103 @@
-use opencode_rust::watcher;
+use opencode_rust::util::config;
+use opencode_rust::watcher::{self, FileEventKind, WatchOptions};
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 use std::time::Duration;
+use tokio::time::timeout;
+use uuid::Uuid;
 
 #[tokio::test]
-async fn test_file_watcher() {
-    let test_dir = Path::new("test_dir");
-    if !test_dir.exists() {
-        fs::create_dir(test_dir).unwrap();
-    }
+async fn file_watcher_reports_lifecycle_events() {
+    let path = temp_dir();
+    let mut handle = watcher::watch(path.as_path(), WatchOptions::default())
+        .await
+        .unwrap();
 
-    let watch_task = tokio::spawn(async move {
-        let _ = watcher::watch(test_dir).await;
-    });
+    let file = path.join("watch.txt");
+    fs::write(&file, "created").unwrap();
+    let event = timeout(Duration::from_secs(5), handle.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.kind, FileEventKind::Created);
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    fs::write(&file, "updated").unwrap();
+    let event = timeout(Duration::from_secs(5), handle.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.kind, FileEventKind::Modified);
 
-    let file_path = test_dir.join("test.txt");
-    fs::write(&file_path, "test").unwrap();
+    fs::remove_file(&file).unwrap();
+    let event = timeout(Duration::from_secs(5), handle.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.kind, FileEventKind::Deleted);
 
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    handle.shutdown().await;
+    let _ = std::fs::remove_dir_all(&path);
+}
 
-    fs::remove_file(&file_path).unwrap();
-    fs::remove_dir(test_dir).unwrap();
+#[tokio::test]
+async fn file_watcher_honors_configured_ignores() {
+    let path = temp_dir();
+    let mut options = WatchOptions::default();
+    options.ignore.push("**/*.tmp".into());
+    let mut handle = watcher::watch(path.as_path(), options).await.unwrap();
 
-    watch_task.abort();
+    let ignored = path.join("ignored.tmp");
+    fs::write(&ignored, "ignored").unwrap();
+
+    assert!(
+        timeout(Duration::from_millis(500), handle.next())
+            .await
+            .is_err()
+    );
+
+    let tracked = path.join("tracked.txt");
+    fs::write(&tracked, "tracked").unwrap();
+    let event = timeout(Duration::from_secs(5), handle.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.path, tracked);
+
+    handle.shutdown().await;
+    let _ = std::fs::remove_dir_all(&path);
+}
+
+#[tokio::test]
+async fn file_watcher_uses_config_ignore_patterns() {
+    let path = temp_dir();
+    let info = config::parse_info(r#"{"watcher": {"ignore": ["**/*.tmp"]}}"#).unwrap();
+    let mut handle = watcher::watch(path.as_path(), (&info).into())
+        .await
+        .unwrap();
+
+    let ignored = path.join("ignored.tmp");
+    fs::write(&ignored, "ignored").unwrap();
+
+    assert!(
+        timeout(Duration::from_millis(500), handle.next())
+            .await
+            .is_err()
+    );
+
+    let tracked = path.join("tracked.txt");
+    fs::write(&tracked, "tracked").unwrap();
+    let event = timeout(Duration::from_secs(5), handle.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.path, tracked);
+
+    handle.shutdown().await;
+    let _ = std::fs::remove_dir_all(&path);
+}
+
+fn temp_dir() -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("opencode-watcher-it-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
 }
