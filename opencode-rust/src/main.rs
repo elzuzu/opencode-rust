@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
 
     match opts.command {
         Command::Run(run_cmd) => {
-            cmd::run::execute(&run_cmd).await?;
+            cmd::run::execute(&run_cmd, &config).await?;
         }
         Command::Generate => {
             info!("Generating OpenAPI spec");

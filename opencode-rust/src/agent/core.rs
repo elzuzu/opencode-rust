@@ -1,8 +1,9 @@
 use crate::tool::core::Tool;
 use crate::util::error::{OpenCodeError, Result};
+use std::sync::Arc;
 
 pub struct Agent {
-    tools: Vec<Box<dyn Tool + Send + Sync>>,
+    tools: Vec<Arc<dyn Tool>>,
 }
 
 impl Agent {
@@ -10,8 +11,11 @@ impl Agent {
         Self { tools: Vec::new() }
     }
 
-    pub fn add_tool<T: Tool + Send + Sync + 'static>(&mut self, tool: T) {
-        self.tools.push(Box::new(tool));
+    pub fn add_tool<T>(&mut self, tool: T)
+    where
+        T: Tool + 'static,
+    {
+        self.tools.push(Arc::new(tool));
     }
 
     pub async fn run_tool(&self, tool_name: &str, args: &[String]) -> Result<String> {
@@ -24,5 +28,9 @@ impl Agent {
             "Tool '{}' not found",
             tool_name
         )))
+    }
+
+    pub fn tools(&self) -> Vec<Arc<dyn Tool>> {
+        self.tools.clone()
     }
 }
