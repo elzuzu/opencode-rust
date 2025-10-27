@@ -7,9 +7,7 @@ pub struct Agent {
 
 impl Agent {
     pub fn new() -> Self {
-        Self {
-            tools: Vec::new(),
-        }
+        Self { tools: Vec::new() }
     }
 
     pub fn add_tool<T: Tool + Send + Sync + 'static>(&mut self, tool: T) {
@@ -22,6 +20,9 @@ impl Agent {
                 return tool.execute(args).await;
             }
         }
-        Err(OpenCodeError::Config(format!("Tool '{}' not found", tool_name)))
+        Err(OpenCodeError::Config(format!(
+            "Tool '{}' not found",
+            tool_name
+        )))
     }
 }

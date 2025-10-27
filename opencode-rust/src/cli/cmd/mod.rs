@@ -1,1 +1,13 @@
+pub mod acp;
+pub mod agent;
+pub mod attach;
+pub mod auth;
+pub mod debug;
+pub mod export;
+pub mod github;
+pub mod mcp;
 pub mod run;
+pub mod serve;
+pub mod stats;
+pub mod tui;
+pub mod upgrade;
