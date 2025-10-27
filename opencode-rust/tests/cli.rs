@@ -8,9 +8,9 @@ mod tests {
     fn test_run_command() {
         let opts = Opts::parse_from(&["opencode-rust", "run", "hello", "world", "--model", "test-model"]);
         match opts.command {
-            Command::Run { message, model, .. } => {
-                assert_eq!(message, vec!["hello", "world"]);
-                assert_eq!(model.unwrap(), "test-model");
+            Command::Run(run_cmd) => {
+                assert_eq!(run_cmd.message, vec!["hello", "world"]);
+                assert_eq!(run_cmd.model.unwrap(), "test-model");
             }
             _ => panic!("Expected Run command"),
         }

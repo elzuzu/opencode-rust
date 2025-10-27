@@ -1,11 +1,17 @@
 use clap::Parser;
+use opencode_rust::agent::core::Agent;
+use opencode_rust::agent::session::Session;
 use opencode_rust::cli::{Command, Opts};
-use opencode_rust::config::Info;
-use opencode_rust::watcher;
+use opencode_rust::tool::echo::EchoTool;
+use opencode_rust::util::config::Info;
+use opencode_rust::util::log;
 use std::path::Path;
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    log::init("info");
+
     let opts = Opts::parse();
 
     let config_path = Path::new("opencode.json");
@@ -16,19 +22,31 @@ async fn main() -> anyhow::Result<()> {
         serde_json::from_str("{}")?
     };
 
-    println!("Loaded config: {:?}", config);
+    info!(?config, "Loaded config");
 
     match opts.command {
-        Command::Run { message, .. } => {
-            println!("Running with message: {:?}", message);
-            let watch_task = tokio::spawn(async move {
-                let _ = watcher::watch(Path::new(".")).await;
-            });
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            watch_task.abort();
+        Command::Run(run_cmd) => {
+            let mut agent = Agent::new();
+            agent.add_tool(EchoTool);
+
+            let session = Session::new();
+            info!(session_id = %session.id(), "Starting new session");
+            info!(message = ?run_cmd.message, "Running with message");
+
+            if let Some((tool_name, args)) = run_cmd.message.split_first() {
+                match agent.run_tool(tool_name, args).await {
+                    Ok(output) => {
+                        info!(%output, "Tool executed successfully");
+                        println!("{}", output);
+                    }
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                    }
+                }
+            }
         }
         Command::Generate => {
-            println!("Generating OpenAPI spec");
+            info!("Generating OpenAPI spec");
         }
     }
 
