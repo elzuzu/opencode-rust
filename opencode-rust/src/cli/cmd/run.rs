@@ -3,11 +3,15 @@ use std::sync::Arc;
 
 use crate::agent::registry::{AgentRegistry, parse_agents_source};
 use crate::agent::spec::ModelHandle;
-use crate::session::{AgentEvent, LocalModel, ProjectContext, SessionRequest, SessionRuntime};
+use crate::session::{
+    AgentEvent, LocalModel, ProjectContext, SessionPrompts, SessionRequest, SessionResult,
+    SessionRuntime, SubagentOutcome,
+};
 use crate::tool::core::Tool;
 use crate::tool::echo::EchoTool;
 use crate::util::config::Info;
 use clap::{Args, ValueEnum};
+use serde::Serialize;
 use tokio::sync::mpsc;
 use tracing::info;
 
@@ -151,11 +155,17 @@ pub async fn execute(cmd: &Run, config: &Info) -> anyhow::Result<()> {
     };
 
     let result = runtime.execute(request).await?;
-    println!("{}", result.primary.summary);
-    if !result.subtasks.is_empty() {
-        for outcome in result.subtasks {
-            println!("[{}] {}", outcome.agent, outcome.summary);
-        }
+    if matches!(cmd.format, OutputFormat::Json) {
+        let report = RunReport::from(&result);
+        let serialized = serde_json::to_string_pretty(&report)?;
+        println!("{}", serialized);
+        return Ok(());
+    }
+
+    let SessionResult { primary, subtasks } = result;
+    println!("{}", primary.summary);
+    for outcome in subtasks {
+        println!("[{}] {}", outcome.agent, outcome.summary);
     }
 
     Ok(())
@@ -186,5 +196,133 @@ fn build_objective(cmd: &Run, message: &str) -> String {
         }
     }
 
+    if let Some(agent) = cmd.agent.as_deref() {
+        if agent == "plan" {
+            if !objective.is_empty() {
+                objective.push_str("\n\n");
+            }
+            objective.push_str(SessionPrompts::plan_reminder().trim());
+        }
+        if agent == "build" && cmd.r#continue {
+            if !objective.is_empty() {
+                objective.push_str("\n\n");
+            }
+            objective.push_str(SessionPrompts::build_switch().trim());
+        }
+    }
+
     objective
+}
+
+#[derive(Debug, Serialize)]
+struct RunReport {
+    primary: SubtaskReport,
+    subtasks: Vec<SubtaskReport>,
+}
+
+impl From<&SessionResult> for RunReport {
+    fn from(result: &SessionResult) -> Self {
+        let subtasks = result.subtasks.iter().map(SubtaskReport::from).collect();
+        Self {
+            primary: SubtaskReport::from(&result.primary),
+            subtasks,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct SubtaskReport {
+    agent: String,
+    objective: String,
+    session_id: String,
+    summary: String,
+    model: String,
+    raw_output: String,
+}
+
+impl From<&SubagentOutcome> for SubtaskReport {
+    fn from(outcome: &SubagentOutcome) -> Self {
+        Self {
+            agent: outcome.agent.clone(),
+            objective: outcome.objective.clone(),
+            session_id: outcome.session_id.to_string(),
+            summary: outcome.summary.clone(),
+            model: outcome.model.id().to_string(),
+            raw_output: outcome.raw_output.clone(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::spec::ModelHandle;
+    use uuid::Uuid;
+
+    #[test]
+    fn serializes_run_report_to_json() {
+        let outcome = SubagentOutcome {
+            agent: "primary".to_string(),
+            objective: "Ship feature".to_string(),
+            session_id: Uuid::nil(),
+            summary: "done".to_string(),
+            model: ModelHandle::new("test/model"),
+            raw_output: "<prompt>".to_string(),
+        };
+        let result = SessionResult {
+            primary: outcome.clone(),
+            subtasks: vec![SubagentOutcome {
+                agent: "builder".to_string(),
+                objective: "Compile".to_string(),
+                session_id: Uuid::new_v4(),
+                summary: "compiled".to_string(),
+                model: ModelHandle::new("child/model"),
+                raw_output: "child".to_string(),
+            }],
+        };
+
+        let report = RunReport::from(&result);
+        let value = serde_json::to_value(&report).expect("json value");
+        assert_eq!(value["primary"]["agent"], "primary");
+        assert_eq!(value["primary"]["model"], "test/model");
+        assert_eq!(value["subtasks"].as_array().map(|a| a.len()), Some(1));
+    }
+
+    #[test]
+    fn plan_agent_appends_plan_reminder() {
+        let cmd = Run {
+            message: vec!["Plan the work".to_string()],
+            command: None,
+            r#continue: false,
+            session: None,
+            share: false,
+            model: None,
+            agent: Some("plan".to_string()),
+            format: OutputFormat::Default,
+            file: Vec::new(),
+            agents_json: None,
+        };
+
+        let objective = build_objective(&cmd, &cmd.joined_message());
+        assert!(objective.contains(SessionPrompts::plan_reminder().trim()));
+    }
+
+    #[test]
+    fn build_agent_includes_switch_when_continuing() {
+        let cmd = Run {
+            message: vec!["Implement feature".to_string()],
+            command: None,
+            r#continue: true,
+            session: Some("session-1".to_string()),
+            share: false,
+            model: None,
+            agent: Some("build".to_string()),
+            format: OutputFormat::Default,
+            file: Vec::new(),
+            agents_json: None,
+        };
+
+        let objective = build_objective(&cmd, &cmd.joined_message());
+        assert!(objective.contains(SessionPrompts::build_switch().trim()));
+    }
 }
